@@ -1,4 +1,3 @@
-My Drive
 // Author: Christine Mckelvey
 // Date: November 06, 2023
 
@@ -16,7 +15,6 @@ My Drive
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/shm.h>
-#include <time.h>
 
 #define SHM_KEY 205431  
 #define PERMS 0644     
@@ -51,7 +49,7 @@ int processCount;
 int simultaneousCount; 
 int processSpawnRate;  
 
-int oneSecond = 100000000; // nano seconds to seconds
+int oneSecond = 1000000000; // nano seconds to seconds
 int scheduleTime = 50000000; // process schedule time
 int tableLogInterval = 500000000;
 
@@ -180,7 +178,6 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-
 void handleTermination() {
     // kill all child processes
     kill(0, SIGTERM);
@@ -194,10 +191,61 @@ void showProcessTable(int index) {
 }
 
 void incrementSimulatedClock(unsigned nanoseconds) {
+
+    simClock[1] += nanoseconds;
+    if (simClock[1] >= 1000000000) 
+    {
+        // Calculate the number of seconds to add
+        // Update seconds and adjust nanoseconds
+        unsigned secondsToAdd = simClock[1] / 1000000000;
+        simClock[0] += secondsToAdd;
+        simClock[1] %= 1000000000;
+    }
+
+    totalElapsed += nanoseconds;
+    memcpy(shmPtr, simClock, sizeof(unsigned int) * 2);
 }
 
 void launchChildren() {
+    while (totalTerminated != processCount)  {
+        // update clock
+        launchTimeElapsed += 100000;
+        incrementSimulatedClock(100000);
+        
+        // determine if we should launch a child
+        if (launchTimeElapsed >= processSpawnRate || totalLaunched == 0) 
+        {
+            if (totalLaunched < processCount && totalLaunched < simultaneousCount + totalTerminated) {
+                // launch new child
+                pid_t pid = fork();
+                if (pid == 0) 
+                {
+                    char* args[] = {"./worker", NULL};
+                    execvp(args[0], args);
+                }
+                else 
+                {
+                    workerTable[totalLaunched].pid = pid;
+                    workerTable[totalLaunched].occupied = 1;
+                    workerTable[totalLaunched].startSeconds = simClock[0];
+                    workerTable[totalLaunched].startNano = simClock[1];
+                } 
+
+                totalLaunched += 1;
+            }
+            launchTimeElapsed = 0;
+        }
+
+        // ... 
+
+        // break out of loop
+        if (simClock[0] >= 10) {
+            break;
+        }
+    }
 }
 
+
+
 void sendMessage(process_PCB* targetWorker) {
-}
+}   
