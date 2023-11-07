@@ -25,7 +25,7 @@ unsigned int simClock[2] = {0, 0};
 typedef struct messages {
     long mtype;
     int requestOrRelease; // 0 means request, 1 means release
-    char resourceType[3]; 
+    int resourceType; // R0, R1, etc
 } messages;
 
 int msgqId; // message queue ID
@@ -61,15 +61,15 @@ int totalLaunched = 0;
 int totalTerminated = 0;
 
 // resource and allocated tables
-int resourcesAllocated[10][18];
-int resourcesRequested[10][18];
+int allocatedMatrix[10][18];
+int requestdMatrix[10][18];
 
 // Function prototypes
 void launchChildren();
 void handleTermination();
 void incrementSimulatedClock(unsigned int n);
 void showProcessTable(int i);
-void sendMessage(process_PCB* targetWorker);
+void sendMessage(process_PCB* targetWorker, int i);
 
 
 int main(int argc, char** argv) {
@@ -142,7 +142,13 @@ int main(int argc, char** argv) {
     }
 
     // setup other matrices/arrays
-    // 
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 18; j++)
+        {
+            allocatedMatrix[i][j] = 0;
+            requestdMatrix[i][j] = 0;
+        }
+    }
 
     // make shared memory
     shmID = shmget(SHM_KEY, sizeof(unsigned) * 2, 0777 | IPC_CREAT);
@@ -236,16 +242,73 @@ void launchChildren() {
             launchTimeElapsed = 0;
         }
 
-        // ... 
-
+        // send messages to children
+        // for (int i = 0; i < 18; i++)
+        // {
+        //     process_PCB* targetWorker = &workerTable[i];
+        //     if (targetWorker->occupied == 1) {
+        //         printf("sending message to child: %d\n", i);
+        //         sendMessage(targetWorker, i);
+        //     }
+        // }  
+        
         // break out of loop
         if (simClock[0] >= 10) {
             break;
         }
+
     }
 }
 
+void sendMessage(process_PCB* targetWorker, int i) {
+    // send message
+    buffer.mtype = targetWorker->pid;
+    if (msgsnd(msgqId, &buffer, sizeof(messages) - sizeof(long), IPC_NOWAIT) == -1) 
+    {
+        perror("msgsnd to child failed\n");
+        exit(1);
+    }
 
+    // get message
+    messages childMsg;
+    if (msgrcv(msgqId, &childMsg, sizeof(messages), getpid(), IPC_NOWAIT) == -1) 
+    {
+        perror("Error couldn't receive message in parent\n");
+        exit(1);
+    }
 
-void sendMessage(process_PCB* targetWorker) {
+    // check child message
+    int sendBack = 0;
+    if (childMsg.requestOrRelease == 1) 
+    {
+        // child is releasing a resource
+        printf("Parent releasing child resource\n");
+        allocatedMatrix[childMsg.resourceType][i] -= 1;
+        sendBack = 1;
+    }
+    else 
+    {
+        // child is requesting a resource
+        printf("Parent checking child request\n");
+        
+        if (allocatedMatrix[childMsg.resourceType][i] != 20) {
+            printf("Parent granting child the resource\n");
+            allocatedMatrix[childMsg.resourceType][i] += 1;
+            sendBack = 1;
+        }
+        else {
+            printf("Parent can't grant resource, child is now in wait queue\n");
+            requestdMatrix[childMsg.resourceType][i] = 1;
+        }
+    }
+
+     // send confirmation message back
+    if (sendBack == 1)
+    {
+        if (msgsnd(msgqId, &buffer, sizeof(messages) - sizeof(long), IPC_NOWAIT) == -1) {
+            perror("msgsnd to child failed\n");
+            exit(1);
+        }
+    }
+
 }   
