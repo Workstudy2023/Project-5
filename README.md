@@ -14,6 +14,10 @@ This project is focuses on resource management. Where we simulate process resour
 The child processes try to request or release a resource. Additionally, potentially terminate after a quarter of a second. The parent process manages the created children. It checks if there is a deadlock when granting
 resources, if so it resolves the deadlock by progressively removing children.
 
+## Deadlock Policy
+When we detect a deadlock in our system, we first determine if we can
+satisify any ongoing resource requests. If the deadlock persists, we try to remove the deadlock
+by removing the most recent child. In other words, the child that's done the least amount of work.
 
 ## Run the oss program:
 
