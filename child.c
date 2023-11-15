@@ -216,7 +216,7 @@ void childAction(int requestOrRelease) {
         perror("Error couldn't receive message in parent\n");
         exit(1);
     }
-
+    
     // Update resource amount 
     // check decision and update child current resources
     if (msgBuffer.requestOrRelease == 0) {
