@@ -217,7 +217,7 @@ void childAction(int requestOrRelease) {
         exit(1);
     }
 
-    // Update resource amount
+    // Update resource amount 
     // check decision and update child current resources
     if (msgBuffer.requestOrRelease == 0) {
         currentResources[msgBuffer.resourceType] += 1;
