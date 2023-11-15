@@ -17,15 +17,6 @@
 #include <sys/msg.h>
 #include <sys/shm.h>
 
-// Created display functions for resource matrices
-// Added screen and file printing for Master
-// Fixed requestMatrix update error 
-// Updated child termination checking logic
-// Removed unused variables from previous project
-// Added deadlock detection algorithm run timer
-// Implemented detection algorithm
-// Correct deadlock check for more than 1 process
-// Fixed child message sending 
 
 #define SHM_KEY 205431  
 #define PERMS 0644     

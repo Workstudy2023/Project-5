@@ -1,8 +1,6 @@
 // Author: Christine Mckelvey
 // Date: November 14, 2023
 
-
-
 #include <time.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
