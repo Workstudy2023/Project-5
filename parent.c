@@ -1,5 +1,5 @@
 // Author: Christine Mckelvey
-// Date: November 13, 2023
+// Date: November 14, 2023
 
 #include <time.h>
 #include <stdio.h>
@@ -16,6 +16,16 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/shm.h>
+
+// Created display functions for resource matrices
+// Added screen and file printing for Master
+// Fixed requestMatrix update error 
+// Updated child termination checking logic
+// Removed unused variables from previous project
+// Added deadlock detection algorithm run timer
+// Implemented detection algorithm
+// Correct deadlock check for more than 1 process
+// Fixed child message sending 
 
 #define SHM_KEY 205431  
 #define PERMS 0644     
@@ -52,12 +62,15 @@ int processCount;
 int simultaneousCount; 
 int processSpawnRate;  
 
+// deadlock detection variables
+int runDetectionAgain = 0; // flag used to run the algorithm again after clearing resources
 int oneSecond = 1000000000; // nano seconds to seconds
 int oneSecondPassed = 0;
 
 int quarterSecond = 250000000; // process schedule time
 int quarterSecondPassed = 0;
 
+// process launching variables
 int totalLaunched = 0;
 int totalTerminated = 0;
 unsigned long long launchTimePassed = 0;
@@ -205,7 +218,7 @@ void showProcessTable() {
 
     if (file == NULL) {
         perror("Error opening file");
-        return;
+        exit(1);
     }
 
     // Print to the file
@@ -242,13 +255,13 @@ void showResourceTables() {
 
     if (file == NULL) {
         perror("Error opening file");
-        return;
+        exit(1);
     }
 
     // Print to the file
     fprintf(file, "Allocated Matrix:\n");
     fprintf(file, "%4s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s\n",
-            "", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10");
+            "", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9");
 
     // append allocation table data
     for (int j = 0; j < numProcesses; j++) {
@@ -264,7 +277,7 @@ void showResourceTables() {
     fprintf(file, "\n");
     fprintf(file, "Requested Matrix:\n");
     fprintf(file, "%4s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s\n",
-            "", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10");
+            "", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9");
 
     // append requested table data
     for (int j = 0; j < numProcesses; j++) {
@@ -281,7 +294,7 @@ void showResourceTables() {
     // Print to the screen
     printf("Allocated Matrix:\n");
     printf("%4s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s\n",
-            "", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10");
+            "", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9");
 
     // append allocation table data
     for (int j = 0; j < numProcesses; j++) {
@@ -297,7 +310,7 @@ void showResourceTables() {
     printf("\n");
     printf("Requested Matrix:\n");
     printf("%4s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s %-3s\n",
-            "", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10");
+            "", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9");
 
     // append requested table data
     for (int j = 0; j < numProcesses; j++) {
@@ -374,11 +387,11 @@ void launchChildren() {
                     {
                         fprintf(file, "R%d: %d ", c, allocatedMatrix[c][i]);
                         printf("R%d: %d ", c, allocatedMatrix[c][i]);
-
-                        allResources[c] += 1;
-                        allocatedMatrix[c][i] = 0;
+                        allResources[c] -= allocatedMatrix[c][i];
                     }
+
                     requestMatrix[c][i] = 0;
+                    allocatedMatrix[c][i] = 0;
                 }
 
                 fprintf(file, "\n");
@@ -392,155 +405,144 @@ void launchChildren() {
         }
 
         // check and send messages to the children
+        checkChildMessage();
         for (int i=0; i<totalLaunched; i++) 
         {
             if (childTable[i].occupied == 1) {
-                if (childTable[i].expectingResponse == 1) {
-                    // check for a message from this child process
-                    checkChildMessage(i);
-                }
-                else {
+                if (childTable[i].expectingResponse == 0) {
                     // send a message to this child process
                     sendChildMessage(i);
-                    childTable[i].expectingResponse = 1;
                 }
             }
         }
 
         // run deadlock detection algorithm
-        if (simClock[0] >= oneSecondPassed + 1) 
+        if ((simClock[0] >= oneSecondPassed + 1) || (runDetectionAgain == 1)) 
         {
-            // // Open the file in append mode
-            // FILE* file = fopen(filename, "a+");
+            // Open the file in append mode
+            FILE* file = fopen(filename, "a+");
+            if (file == NULL) {
+                perror("Error opening file");
+                exit(1);
+            }
 
-            // if (file == NULL) {
-            //     perror("Error opening file");
-            //     return;
-            // }
+            // Master running deadlock detection
+            fprintf(file, "Master running deadlock detection at time %u:%u\n", simClock[0], simClock[1]);
+            printf("Master running deadlock detection at time %u:%u\n",simClock[0], simClock[1]);
 
-            // // Master running deadlock detection
+            // check for available resources
+            // if there are some available, we give it to the children thats requesting them
+            for (int i=0; i<totalLaunched; i++) {
+                for (int j=0; j<10; j++) {
+                    if (allResources[j] != 20 && requestMatrix[j][i] == 1)
+                    {
+                        allResources[j] += 1;
+                        requestMatrix[j][i] = 0;
+                        allocatedMatrix[j][i] += 1;
+                        childTable[i].expectingResponse = 0;
 
-            // fprintf(file, "Master running deadlock detection at time %u:%u\n",
-            //     simClock[0], simClock[1]);
-            // fprintf(file, "\n");
+                        fprintf(file, "Master detected resource R%d is available, now granting it to process P%d\nMaster removing process P%d from wait queue at time %u:%u\n", 
+                            j, i, i, simClock[0], simClock[1]);
+                        fprintf(file, "\n");
 
-            // printf("Master running deadlock detection at time %u:%u\n",
-            //     simClock[0], simClock[1]);
-            // printf("\n");
+                        printf("Master detected resource R%d is available, now granting it to process P%d\nMaster removing process P%d from wait queue at time %u:%u\n", 
+                            j, i, i, simClock[0], simClock[1]);
+                        printf("\n");
 
-            // // check ungoing resource requests
-            // for (int i=0; i<totalLaunched; i++) {
-            //     for (int j=0; j<10; j++) {
-            //         if (allResources[j] < 20 && requestMatrix[j][i] == 1)
-            //         {
-            //             allResources[j] += 1;
-            //             requestMatrix[j][i] -= 1;
-            //             allocatedMatrix[j][i] += 1;
-            //             childTable[i].expectingResponse = 0;
+                        // send resource message back to child that was waiting
+                        buffer.mtype = childTable[i].pid;
+                        if (msgsnd(msgqId, &buffer, sizeof(messages) - sizeof(long), 0) == -1) {
+                            perror("msgsnd to child failed\n");
+                            exit(1);
+                        }        
+                        break;
+                    }
+                }
+            }
 
-            //             fprintf(file, "Master granting resource R%d to process P%d and removing it from wait queue\n", j, i);
-            //             fprintf(file, "\n");
+            // get child with least amount of time in the system
+            int leastActiveChild = -1;
+            int deadlockedCount = 0;
+            for (int i=0; i<totalLaunched; i++) {
+                for (int j=0; j<10; j++) {
+                    if (requestMatrix[j][i] == 1) {
+                        // update the last child
+                        leastActiveChild = i;
 
-            //             printf("Master granting resource R%d to process P%d and removing it from wait queue\n", j, i);
-            //             printf("\n");
+                        // this child is potentially deadlocked
+                        deadlockedCount += 1;
+                    }
+                }
+            }
 
-            //             // send resource message back to child that was waiting
-            //             sendChildMessage(i);
-            //             childTable[i].expectingResponse = 1;
-            //             break;
-            //         }
-            //     }
-            // }
+            // remove deadlock
+            // we consider a deadlock if there are more than 1 processes waiting for a resource
+            // after we've allocated them 
+            if (deadlockedCount > 1)
+            {
+                fprintf(file, "\nProcesses ");
+                for (int i=0; i<totalLaunched; i++) 
+                {
+                    for (int j=0; j<10; j++)
+                    {
+                        if (requestMatrix[j][i] == 1)
+                        {
+                            fprintf(file, "P%d ", i);
+                            printf("P%d ", i);
+                        }
+                    }
+                }
+                fprintf(file, "are deadlocked.\nMaster terminating P%d to remove deadlock\n", leastActiveChild);
+                fprintf(file, "\n");
 
-            // // get child with least amount of time in the system
-            // int newestChild = -1;
-            // for (int i=totalLaunched; i>0; i--) {
-            //     for (int j=0; j<10; j++) {
-            //         if (requestMatrix[j][i] == 1)
-            //         {
-            //             if (newestChild == -1) {
-            //                 fprintf(file, "Processes ");
-            //                 printf("Processes");
-            //                 newestChild = i;
-            //             }   
+                printf("are deadlocked.\nMaster terminating P%d to remove deadlock\n", leastActiveChild);
+                printf("\n");
 
-            //             fprintf(file, "P%d ", i);
-            //             printf("P%d ", i);
-            //             break;
-            //         }
-            //     }
-            // }
+                // clear removed childs resources
+                fprintf(file, "Process P%d terminated. Releasing its resources: ", leastActiveChild);
+                printf("Process P%d terminated. Releasing its resources: ", leastActiveChild);
 
-            // // remove deadlock
-            // // we will remove the child with the least amount of "work" done
-            // if (newestChild != -1)
-            // {
-            //     fprintf(file, "deadlocked\n");
-            //     fprintf(file, "\n");
+                for (int c=0; c<10; c++) {
+                    if (allocatedMatrix[c][leastActiveChild] > 0)
+                    {
+                        fprintf(file, "R%d:%d ", c, allocatedMatrix[c][leastActiveChild]);
+                        printf("R%d:%d ", c, allocatedMatrix[c][leastActiveChild]);
+                        allResources[c] -= allocatedMatrix[c][leastActiveChild];
+                    }
 
-            //     printf("deadlocked\n");
-            //     printf("\n");
+                    requestMatrix[c][leastActiveChild] = 0;
+                    allocatedMatrix[c][leastActiveChild] = 0;
+                }
 
-            //     fprintf(file, "Master terminating P%d to remove deadlock\n", newestChild);
-            //     fprintf(file, "\n");
+                fprintf(file, "\n");
+                printf("\n");
 
-            //     printf("Master terminating P%d to remove deadlock\n", newestChild);
-            //     printf("\n");
+                childTable[leastActiveChild].occupied = 0;
+                childTable[leastActiveChild].expectingResponse = 0;
+                totalTerminated += 1;
 
-            //     fprintf(file, "Process P%d terminated", newestChild);
-            //     fprintf(file, "\n");
-
-            //     printf("Process P%d terminated\n", newestChild);
-            //     printf("\n");
-
-            //     // update matrices
-            //     fprintf(file, "    Resources released: ");
-            //     printf("    Resources released: ");
-
-            //     for (int r=0; r<10; r++) {
-            //         if (allocatedMatrix[r][newestChild] > 0) {
-
-            //             fprintf(file, "R%d : %d ", r, allocatedMatrix[r][newestChild]);
-            //             printf("R%d : %d ", r, allocatedMatrix[r][newestChild]);
-
-            //             allResources[r] -= allocatedMatrix[r][newestChild];
-            //         }
-            //         allocatedMatrix[r][newestChild] = 0;
-            //         requestMatrix[r][newestChild] = 0;
-            //     }
-
-            //     fprintf(file, "\n");
-            //     printf("\n");
-
-            //     childTable[newestChild].occupied = 0;
-            //     childTable[newestChild].expectingResponse = 0;
-            //     pid_t removeChild = childTable[newestChild].pid;
-            //     totalTerminated += 1;
-
-            //     // terminate the child process
-            //     if (kill(removeChild, SIGTERM) == -1) {
-            //         perror("kill error in parent\n");
-            //         exit(1);
-            //     }
-                
-            //     // wait for the child process to terminate
-            //     int childStatus;
-            //     if (waitpid(removeChild, &childStatus, 0) == -1) {
-            //         perror("waitpid error in parent\n");
-            //         exit(1);
-            //     }
-            
-            //     printf("Removed child P%d to remove deadlock\n", newestChild);
-            // }
-            // else 
-            // {
-            //     fprintf(file, "No deadlocks detected\n");
-            //     printf("No deadlocks detected\n");
-            // }
-            
-            // quarterSecondPassed = simClock[1];
-            // fclose(file);            
-
+                // terminate deadlocked child
+                if (kill(childTable[leastActiveChild].pid, SIGKILL) == -1) {
+                    perror("kill error in parent\n");
+                    exit(1);
+                }
+                else {
+                    int childStatus;
+                    if (waitpid(childTable[leastActiveChild].pid, &childStatus, 0) == -1) {
+                        perror("waitpid error in parent\n");
+                    }
+                }
+                // run detection before 1 second 
+                runDetectionAgain = 1;
+            }
+            else 
+            {
+                runDetectionAgain = 0;
+                fprintf(file, "No deadlocks detected\n\n");
+                printf("No deadlocks detected\n\n");
+            }
+                     
+            fclose(file);            
             oneSecondPassed = simClock[0];   
         }
 
@@ -552,7 +554,6 @@ void launchChildren() {
             showResourceTables();
             quarterSecondPassed = simClock[1];
         }
-
     }
 }
  
@@ -565,17 +566,16 @@ void sendChildMessage(int targetChild) {
         perror("msgsnd to child failed\n");
         exit(1);
     }
-
+    childTable[targetChild].expectingResponse = 1;
 }
 
 // Function to check a message from children
-void checkChildMessage(int targetChild) {
+void checkChildMessage() {    
     // Open the file in append mode
     FILE* file = fopen(filename, "a+");
-
     if (file == NULL) {
         perror("Error opening file");
-        return;
+        exit(1);
     }
 
     // get child message
@@ -591,10 +591,11 @@ void checkChildMessage(int targetChild) {
     } 
     else
     {
-        // testing here
-
+        // which child sent us a message
         // verify the child who sent message
+        int targetChild = 0;
         pid_t senderPID = childMsg.targetChild;
+
         for (int i=0; i<processCount; i++) 
         {
             if (childTable[i].pid == senderPID) {
@@ -617,7 +618,6 @@ void checkChildMessage(int targetChild) {
             // child is releasing a resource
             allResources[childMsg.resourceType] -= 1;
             allocatedMatrix[childMsg.resourceType][targetChild] -= 1;
-            childTable[targetChild].expectingResponse = 0;
             sendMessageBack = 1;
         }
         else 
@@ -643,13 +643,11 @@ void checkChildMessage(int targetChild) {
 
                 allResources[childMsg.resourceType] += 1;
                 allocatedMatrix[childMsg.resourceType][targetChild] += 1;                
-                childTable[targetChild].expectingResponse = 0;
                 sendMessageBack = 1;
             }
             else 
             {
-                // cant give child resource
-                // put them in wait queue
+                // cant give child resource so put them in wait queue
                 printf("Master: no instances of R%d available, P%d added to wait queue at time %u:%u\n",
                     childMsg.resourceType, targetChild, simClock[0], simClock[1]);
                 printf("\n");
@@ -658,8 +656,7 @@ void checkChildMessage(int targetChild) {
                     childMsg.resourceType, targetChild, simClock[0], simClock[1]);
                 fprintf(file, "\n");
 
-                // childTable[targetChild].expectingResponse = 1;
-                // requestMatrix[childMsg.resourceType][targetChild] = 1;
+                requestMatrix[childMsg.resourceType][targetChild] = 1;
             }
         }
 
@@ -667,6 +664,8 @@ void checkChildMessage(int targetChild) {
         if (sendMessageBack == 1)
         {
             buffer.mtype = childTable[targetChild].pid;
+            childTable[targetChild].expectingResponse = 0;
+
             if (msgsnd(msgqId, &buffer, sizeof(messages) - sizeof(long), 0) == -1) {
                 perror("msgsnd to child failed\n");
                 exit(1);

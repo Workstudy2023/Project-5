@@ -1,5 +1,7 @@
 // Author: Christine Mckelvey
-// Date: November 13, 2023
+// Date: November 14, 2023
+
+
 
 #include <time.h>
 #include <sys/ipc.h>
@@ -18,7 +20,7 @@ unsigned int simClock[2];
 #define PERMS 0644
 
 typedef struct messages {
-    long mtype;
+    long mtype; // allows the parent to know its receiving a message
     int requestOrRelease; // 0 means request, 1 means release
     int resourceType; // R0, R1, etc
     pid_t targetChild; // child that wants to release or request resource
@@ -31,6 +33,7 @@ int lastDecisionCheck = 0;
 int lastTerminationCheck = 0;
 
 // amount of resources the child has of each resource type
+// R0, R1, R2, R3, R4, R5, R6, R7, R8, R9
 int currentResources[10] = {0, 0, 0, 0, 0, 0, 0 ,0, 0 ,0};
 
 // Function prototypes
@@ -59,12 +62,17 @@ int main(int argc, char const *argv[]) {
     return 0;
 }
 
+// Function to update time and check for termination
 int timePassed() {
     // check if 250ms have passed
     // check to see if we should potentially terminate
-    if (simClock[0] >= 1 && (simClock[1] >= lastTerminationCheck + 250000000)) {
+    if (simClock[0] >= 1 && ((simClock[1] >= lastTerminationCheck + 250000000) 
+    || (simClock[1] == 0))) 
+    {
+        // 15 % chance of termination
         int randTerm = rand() % 101;
-        if (randTerm <= 10) {
+        if (randTerm <= 15) 
+        {
             exit(0);
         }
         lastTerminationCheck = simClock[1];
@@ -72,7 +80,9 @@ int timePassed() {
 
     // see if 1ms has passed because
     // thats when we can send a release or request to the parent
-    if (simClock[1] >= (lastDecisionCheck) + 1000000) {
+    if (simClock[1] >= lastDecisionCheck + 1000000
+    || (simClock[1] == 0 && simClock[0] > 1)) 
+    {
         lastDecisionCheck = simClock[1];
         return 1;
     }
@@ -80,10 +90,10 @@ int timePassed() {
     return 0;
 }
 
+// Function to update clock, check timer and get initial parent messages
 void childTask() { 
     // receive and send messages
     while (1) {
-        
         // Get message from parent
         if (msgrcv(queueID, &msgBuffer, sizeof(msgBuffer), getpid(), 0) == -1) 
         {
@@ -132,6 +142,7 @@ void childTask() {
     }
 }
 
+// Function to make requst or release and send message to parent
 void childAction(int requestOrRelease) {
     // 0 means request, 1 means release
     if (requestOrRelease == 1) 
@@ -140,7 +151,7 @@ void childAction(int requestOrRelease) {
         // because its possible that there isn't any currently
         int canReleaseResource = 0;
         for (int i=0; i<10; i++) {
-            if (currentResources[i] > 0) {
+            if (currentResources[i] != 0) {
                 canReleaseResource = 1;
                 break;
             }
@@ -149,7 +160,7 @@ void childAction(int requestOrRelease) {
             while (1) {
                 // find a random resource to release
                 int randResource = rand() % 10; // R0, R1, R2, .. R9 
-                if (currentResources[randResource] > 0) {
+                if (currentResources[randResource] != 0) {
                     msgBuffer.resourceType = randResource;
                     msgBuffer.requestOrRelease = requestOrRelease;
                     break;
@@ -169,7 +180,7 @@ void childAction(int requestOrRelease) {
         // because its possible that there isn't any left
         int canRequestResource = 0;
         for (int i=0; i<10; i++) {
-            if (currentResources[i] < 20) {
+            if (currentResources[i] != 20) {
                 canRequestResource = 1;
                 break;
             }
@@ -178,9 +189,9 @@ void childAction(int requestOrRelease) {
             while (1) {
                 // find a random resource to request
                 int randResource = rand() % 10; // R0, R1, R2, .. R9 
-                if (currentResources[randResource] < 20) {
+                if (currentResources[randResource] != 20) {
                     msgBuffer.resourceType = randResource;
-                    msgBuffer.requestOrRelease = requestOrRelease;
+                    msgBuffer.requestOrRelease = 0;
                     break;
                 }
             }
@@ -215,5 +226,5 @@ void childAction(int requestOrRelease) {
     } 
     else {
         currentResources[msgBuffer.resourceType] -= 1;
-    }
+    } 
 }
