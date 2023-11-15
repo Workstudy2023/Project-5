@@ -38,7 +38,6 @@ int timePassed();
 void childTask();
 void childAction();
 
-
 int main(int argc, char const *argv[]) {
     // generate randomness
     srand(time(NULL) + getpid());
