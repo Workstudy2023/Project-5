@@ -17,7 +17,6 @@
 #include <sys/msg.h>
 #include <sys/shm.h>
 
-
 #define SHM_KEY 205431  
 #define PERMS 0644     
 
