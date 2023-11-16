@@ -52,7 +52,7 @@ int processCount;
 int simultaneousCount; 
 int processSpawnRate;  
 
-// deadlock detection variables.
+// deadlock detection variables
 int runDetectionAgain = 0; // flag used to run the algorithm again after clearing resources
 int oneSecond = 1000000000; // nano seconds to seconds
 int oneSecondPassed = 0;

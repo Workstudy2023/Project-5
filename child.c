@@ -90,7 +90,7 @@ int timePassed() {
 
 // Function to update clock, check timer and get initial parent messages
 void childTask() { 
-    // receive and send messages
+    // receive and send messages.
     while (1) {
         // Get message from parent
         if (msgrcv(queueID, &msgBuffer, sizeof(msgBuffer), getpid(), 0) == -1) 
