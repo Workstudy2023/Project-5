@@ -22,7 +22,7 @@
 
 unsigned int simClock[2] = {0, 0};
 
-// message queue structure
+// message queue structure  
 typedef struct messages {
     long mtype;
     int requestOrRelease; // 0 means request, 1 means release
