@@ -202,7 +202,7 @@ void childAction(int requestOrRelease) {
         }
     }
 
-    // Send and receive messages as before
+    // Send and receive messages as before.
     msgBuffer.mtype = getppid();
     msgBuffer.targetChild = getpid();
     if (msgsnd(queueID, &msgBuffer, sizeof(messages) - sizeof(long), 0) == -1) {
