@@ -416,7 +416,7 @@ void launchChildren() {
                 exit(1);
             }
 
-            // Master running deadlock detection.
+            // Master running deadlock detection
             fprintf(file, "Master running deadlock detection at time %u:%u\n", simClock[0], simClock[1]);
             printf("Master running deadlock detection at time %u:%u\n",simClock[0], simClock[1]);
 
@@ -683,7 +683,7 @@ void incrementSimulatedClock() {
     memcpy(shmPtr, simClock, sizeof(unsigned int) * 2);
 }
 
-// Function to clean up the code
+// Function to clean up the code   
 void handleTermination() {
     // kill all child processes
     // clean msg queue and shared memory
