@@ -52,7 +52,7 @@ int processCount;
 int simultaneousCount; 
 int processSpawnRate;  
 
-// deadlock detection variables
+// deadlock detection variables 
 int runDetectionAgain = 0; // flag used to run the algorithm again after clearing resources
 int oneSecond = 1000000000; // nano seconds to seconds
 int oneSecondPassed = 0;
@@ -318,7 +318,7 @@ void showResourceTables() {
     fclose(file);
 }
 
-// Function to launch new children, check deadlocks, and clear resources
+// Function to launch new children, check deadlocks , and clear resources
 void launchChildren() {
     while (totalTerminated != processCount)  {
         // update clock
