@@ -90,7 +90,7 @@ int timePassed() {
 
 // Function to update clock, check timer and get initial parent messages
 void childTask() { 
-    // receive and send messages.
+    // receive and send messages
     while (1) {
         // Get message from parent
         if (msgrcv(queueID, &msgBuffer, sizeof(msgBuffer), getpid(), 0) == -1) 
@@ -166,8 +166,8 @@ void childAction(int requestOrRelease) {
             }
         }
         else {
-            // request a resource instead
-            // because we dont have any to release
+            // request a resource instead;
+            // because we dont have any to release.
             msgBuffer.requestOrRelease = 0;
             msgBuffer.resourceType = rand() % 10; // R0, R1, R2, .. R9 
         }
@@ -210,7 +210,7 @@ void childAction(int requestOrRelease) {
         exit(1);
     }
 
-    // Wait for message back from parent
+    // Wait for message back from parent.
     messages msgBackFromParent;
     if (msgrcv(queueID, &msgBackFromParent, sizeof(messages), getpid(), 0) == -1) {
         perror("Error couldn't receive message in parent\n");
