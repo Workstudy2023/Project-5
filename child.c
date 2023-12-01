@@ -72,10 +72,9 @@ int timePassed() {
     if (terminationRequriementTime == 1 && ((simClock[1] >= lastTerminationCheck + 250000000) 
     || (simClock[1] == 0 && simClock[0] >= 1))) 
     {
-        // 15 % chance of termination
+        // 10 % chance of termination
         int randTerm = rand() % 101;
-        if (randTerm <= 15) 
-        {
+        if (randTerm <= 10) {
             exit(0);
         }
         lastTerminationCheck = simClock[1];
@@ -172,7 +171,6 @@ void childAction(int requestOrRelease) {
             int randResource = releaseableResources[rand() % canReleaseResource];
             msgBuffer.resourceType = randResource;
             msgBuffer.requestOrRelease = requestOrRelease;
-
         }
     }
     else 
