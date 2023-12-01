@@ -462,12 +462,12 @@ void runDetectionAlgorithm() {
     printf("Master running deadlock detection at time %u:%u\n",simClock[0], simClock[1]);
 
     // check for available resources
-    // give child resource is available
+    // give resource to children, in wait queue, that are currently waiting for 
+    // the resource, if its available.
     for (int i = 0; i < numProcesses; i++) {
         for (int j = 0; j < numResources; j++) {
             if (requestMatrix[j][i] == 1 && allResources[j] != 20) 
-            {
-    
+            {    
                 allResources[j] += 1;
                 requestMatrix[j][i] = 0;
                 allocatedMatrix[j][i] += 1;
@@ -491,7 +491,7 @@ void runDetectionAlgorithm() {
         }
     }
 
-    // get child with least amount of time in the system (most recent child)
+    // get the last child so we can remove it from the deadlock (our deadlock policy)
     int deadlockedCount = 0;
     int leastActiveChild = 0;
     for (int i = 0; i < numProcesses; i++) 
@@ -581,7 +581,6 @@ void runDetectionAlgorithm() {
     if (deadlockedCount > 1) {
         runDetectionAlgorithm();
     }
-
 }
 
 // Function to send a message to a child
