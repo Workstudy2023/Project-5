@@ -1,5 +1,5 @@
 // Author: Christine Mckelvey
-// Date: November 14, 2023
+// Date: November 14, 2023 
 
 #include <time.h>
 #include <stdio.h>
@@ -47,7 +47,7 @@ struct PCB childTable[18];
 unsigned shmID;             
 unsigned* shmPtr; 
 
-char* filename = NULL;    
+char* filename = NULL; // logfile.txt
 int processCount;      
 int simultaneousCount; 
 int processSpawnRate;  
@@ -56,7 +56,8 @@ int processSpawnRate;
 int oneSecond = 1000000000; // nano seconds to seconds
 int oneSecondPassed = 0;
 
-int quarterSecond = 250000000; // process schedule time (todo: change to 500000000)
+// half a seconds instead a quarter
+int quarterSecond = 500000000; // process schedule time
 int quarterSecondPassed = 0;
 
 // process launching variables
@@ -79,13 +80,12 @@ void incrementSimulatedClock();
 void handleTermination();
 void runDetectionAlgorithm();
 
-// Function to setup resource tables, msg queue, and shared memory
 int main(int argc, char** argv) {
     // register signal handlers for interruption and timeout
     srand(time(NULL) + getpid());
     signal(SIGINT, handleTermination);
     signal(SIGALRM, handleTermination);
-    alarm(10); 
+    alarm(5); 
 
     // check arguments
     char argument;
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
                 break;
             }           
             case 'h':
-                printf("oss [-h] [-n proc] [-s simul] [-t timeToLaunchNewChild] [-f logfile]\n");
+                printf("\noss [-h] [-n proc] [-s simul] [-t timeToLaunchNewChild] [-f logfile]\n");
                 printf("h is the help screen\n"
                     "n is the total number of child processes oss will ever launch\n"
                     "s specifies the maximum number of concurrent running processes\n"
@@ -173,13 +173,13 @@ int main(int argc, char** argv) {
     if (shmID == -1) 
     {
         perror("Unable to acquire the shared memory segment.\n");
-        exit(1);
+        handleTermination();
     }
     shmPtr = (unsigned*)shmat(shmID, NULL, 0);
     if (shmPtr == NULL) 
     {
         perror("Unable to connect to the shared memory segment.\n");
-        exit(1);
+        handleTermination();
     }
     memcpy(shmPtr, simClock, sizeof(unsigned) * 2);
 
@@ -188,14 +188,14 @@ int main(int argc, char** argv) {
     if (messageQueueKey == -1) 
     {
         perror("Unable to generate a key for the message queue.\n");
-        exit(1);
+        handleTermination();
     }
 
     msgqId = msgget(messageQueueKey, PERMS | IPC_CREAT);
     if (msgqId == -1) 
     {
         perror("Unable to create or access the message queue.\n");
-        exit(1);
+        handleTermination();
     }
 
     launchChildren();
@@ -209,7 +209,7 @@ void showProcessTable() {
 
     if (file == NULL) {
         perror("Error opening file");
-        exit(1);
+        handleTermination();
     }
 
     // Print to the file
@@ -246,7 +246,7 @@ void showResourceTables() {
 
     if (file == NULL) {
         perror("Error opening file");
-        exit(1);
+        handleTermination();
     }
 
     // Print to the file
@@ -362,11 +362,11 @@ void launchChildren() {
                 FILE* file = fopen(filename, "a+");
                 if (file == NULL) {
                     perror("Error opening file");
-                    return;
+                    handleTermination();
                 }
 
-                fprintf(file, "Master detected process P%d terminated\n", i);
-                printf("Master detected process P%d terminated\n", i);
+                fprintf(file, "\nMaster detected process P%d terminated\n", i);
+                printf("\nMaster detected process P%d terminated\n", i);
                 
                 // child has terminated
                 // so we clear the child resources
@@ -374,11 +374,11 @@ void launchChildren() {
                 printf("Releasing resources: ");
 
                 for (int c=0; c<10; c++) {
-                    if (allocatedMatrix[c][i] > 0)
+                    if (allocatedMatrix[c][i] != 0)
                     {
+                        allResources[c] -= allocatedMatrix[c][i];
                         fprintf(file, "R%d: %d ", c, allocatedMatrix[c][i]);
                         printf("R%d: %d ", c, allocatedMatrix[c][i]);
-                        allResources[c] -= allocatedMatrix[c][i];
                     }
 
                     requestMatrix[c][i] = 0;
@@ -396,7 +396,7 @@ void launchChildren() {
         }
 
         // check if we should stop
-        if (totalLaunched == totalTerminated) {
+        if (processCount == totalTerminated) {
             handleTermination();
         }
 
@@ -417,27 +417,6 @@ void launchChildren() {
             runDetectionAlgorithm();
         }
 
-        int processesWaiting = 0;
-        int processesOccupied = 0;
-        for (int i=0; i<totalLaunched; i++) {
-            if (childTable[i].occupied == 1) {
-                processesOccupied += 1;
-            }
-            for (int j=0; j<10; j++) {
-                if (requestMatrix[j][i] == 1) {
-                    processesWaiting += 1;
-                    break;
-                }
-            }
-        }
-
-        // run deadlock detection if all running processes are currently waiting
-        if (processesWaiting == processesOccupied && processesOccupied != 0) {
-            showProcessTable();
-            showResourceTables();
-            runDetectionAlgorithm();
-        }
-
         // show all the resource and process information
         if (simClock[1] >= quarterSecondPassed + quarterSecond 
         || (simClock[1] == 0 && simClock[0] > 1)) 
@@ -450,7 +429,7 @@ void launchChildren() {
 
     handleTermination();
 }
-  
+ 
 // Function to run deadlock detection algorithm code
 void runDetectionAlgorithm() {
     // update seconds counter
@@ -472,12 +451,12 @@ void runDetectionAlgorithm() {
     printf("Master running deadlock detection at time %u:%u\n",simClock[0], simClock[1]);
 
     // check for available resources
-    // give resource to children, in wait queue, that are currently waiting for 
-    // the resource, if its available.
+    // give child resource is available
     for (int i = 0; i < numProcesses; i++) {
         for (int j = 0; j < numResources; j++) {
             if (requestMatrix[j][i] == 1 && allResources[j] != 20) 
-            {    
+            {
+    
                 allResources[j] += 1;
                 requestMatrix[j][i] = 0;
                 allocatedMatrix[j][i] += 1;
@@ -501,7 +480,7 @@ void runDetectionAlgorithm() {
         }
     }
 
-    // get the last child so we can remove it from the deadlock (our deadlock policy)
+    // get child with least amount of time in the system (most recent child)
     int deadlockedCount = 0;
     int leastActiveChild = 0;
     for (int i = 0; i < numProcesses; i++) 
@@ -591,6 +570,7 @@ void runDetectionAlgorithm() {
     if (deadlockedCount > 1) {
         runDetectionAlgorithm();
     }
+
 }
 
 // Function to send a message to a child
@@ -600,20 +580,13 @@ void sendChildMessage(int targetChild) {
     buffer.mtype = childTable[targetChild].pid;
     if (msgsnd(msgqId, &buffer, sizeof(messages) - sizeof(long), 0) == -1) {
         perror("msgsnd to child failed\n");
-        exit(1);
+        handleTermination();
     }
     childTable[targetChild].expectingResponse = 1;
 }
 
 // Function to check a message from children
 void checkChildMessage() {        
-    // Open the file in append mode
-    FILE* file = fopen(filename, "a+");
-    if (file == NULL) {
-        perror("Error opening file");
-        exit(1);
-    }
-
     // get child message
     messages childMsg;
     if (msgrcv(msgqId, &childMsg, sizeof(messages), getpid(), IPC_NOWAIT) == -1) {
@@ -622,17 +595,17 @@ void checkChildMessage() {
         } 
         else {
             perror("Error receiving message in child process");
-            exit(1); 
+            handleTermination(); 
         }
     } 
     else
     {
         // which child sent us a message
-        // verify the child who sent message
-        int targetChild = 0;
+        // get the child who sent message
+        int targetChild = -1;
         pid_t senderPID = childMsg.targetChild;
 
-        for (int i=0; i<processCount; i++) 
+        for (int i=0; i<processCount; i++)  
         {
             if (childTable[i].pid == senderPID) {
                 targetChild = i;
@@ -642,40 +615,48 @@ void checkChildMessage() {
         // check child message content
         int sendMessageBack = 0;
         if (childMsg.requestOrRelease == 1) 
-        {            
-            fprintf(file, "Master has acknowledged Process P%d releasing R%d at time %u:%u\n",
+        {         
+            FILE* file = fopen(filename, "a+");
+            if (file == NULL) {
+                perror("Error opening file");
+                handleTermination();
+            }   
+
+            fprintf(file, "Master has acknowledged Process P%d releasing R%d at time %u:%u\n\n",
                 targetChild, childMsg.resourceType, simClock[0], simClock[1]);
-            fprintf(file, "\n");
             
-            printf("Master has acknowledged Process P%d releasing R%d at time %u:%u\n",
+            printf("Master has acknowledged Process P%d releasing R%d at time %u:%u\n\n",
                 targetChild, childMsg.resourceType, simClock[0], simClock[1]);
-            printf("\n");
 
             // child is releasing a resource
             allResources[childMsg.resourceType] -= 1;
             allocatedMatrix[childMsg.resourceType][targetChild] -= 1;
             sendMessageBack = 1;
+
+            fclose(file);
         }
         else 
         {
-            fprintf(file, "Master has detected Process P%d requesting R%d at time %u:%u\n",
-                targetChild, childMsg.resourceType, simClock[0], simClock[1]);
-            fprintf(file, "\n");
+            FILE* file = fopen(filename, "a+");
+            if (file == NULL) {
+                perror("Error opening file");
+                handleTermination();
+            }
 
-            printf("Master has detected Process P%d requesting R%d at time %u:%u\n",
+            fprintf(file, "\nMaster has detected Process P%d requesting R%d at time %u:%u\n",
                 targetChild, childMsg.resourceType, simClock[0], simClock[1]);
-            printf("\n");
+
+            printf("\nMaster has detected Process P%d requesting R%d at time %u:%u\n",
+                targetChild, childMsg.resourceType, simClock[0], simClock[1]);
             
             // child is requesting a resource
             if (allResources[childMsg.resourceType] != 20) 
             {
                 fprintf(file, "Master granting P%d request R%d at time %u:%u\n", 
                     targetChild, childMsg.resourceType, simClock[0], simClock[1]);
-                fprintf(file, "\n");
 
                 printf("Master granting P%d request R%d at time %u:%u\n", 
                     targetChild, childMsg.resourceType, simClock[0], simClock[1]);
-                printf("\n");
 
                 allResources[childMsg.resourceType] += 1;
                 allocatedMatrix[childMsg.resourceType][targetChild] += 1;                
@@ -684,16 +665,16 @@ void checkChildMessage() {
             else 
             {
                 // cant give child resource so put them in wait queue
-                printf("Master: no instances of R%d available, P%d added to wait queue at time %u:%u\n",
+                printf("Master: no instances of R%d available, P%d added to wait queue at time %u:%u\n\n",
                     childMsg.resourceType, targetChild, simClock[0], simClock[1]);
-                printf("\n");
 
-                fprintf(file, "Master: no instances of R%d available, P%d added to wait queue at time %u:%u\n",
+                fprintf(file, "Master: no instances of R%d available, P%d added to wait queue at time %u:%u\n\n",
                     childMsg.resourceType, targetChild, simClock[0], simClock[1]);
-                fprintf(file, "\n");
 
                 requestMatrix[childMsg.resourceType][targetChild] = 1;
             }
+
+            fclose(file);
         }
 
         // send confirmation message back
@@ -704,21 +685,24 @@ void checkChildMessage() {
 
             if (msgsnd(msgqId, &buffer, sizeof(messages) - sizeof(long), 0) == -1) {
                 perror("msgsnd to child failed\n");
-                exit(1);
+                handleTermination();
             }
         }
     }
-
-    fclose(file);
 }
 
 // Function to update the click by 0.1 milliseconds
 void incrementSimulatedClock() {
-    simClock[1] += 100000;
+    int nanoseconds = 100000;
+    simClock[1] += nanoseconds;
+
     if (simClock[1] >= 1000000000) 
     {
-        simClock[1] -= 1000000000;
-        simClock[0] += 1;
+        // Calculate the number of seconds to add
+        // Update seconds and adjust nanoseconds
+        unsigned secondsToAdd = simClock[1] / 1000000000;
+        simClock[0] += secondsToAdd;
+        simClock[1] %= 1000000000;
     }
 
     memcpy(shmPtr, simClock, sizeof(unsigned int) * 2);

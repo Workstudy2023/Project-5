@@ -72,9 +72,9 @@ int timePassed() {
     if (terminationRequriementTime == 1 && ((simClock[1] >= lastTerminationCheck + 250000000) 
     || (simClock[1] == 0 && simClock[0] >= 1))) 
     {
-        // 20 % chance of termination
+        // 10 % chance of termination
         int randTerm = rand() % 101;
-        if (randTerm <= 20) {
+        if (randTerm <= 10) {
             exit(0);
         }
         lastTerminationCheck = simClock[1];
@@ -129,7 +129,7 @@ void childTask() {
             {
                 // release or request a resource
                 int choice = rand() % 101;
-                if (choice <= 6) {
+                if (choice <= 10) {
                     // Set requestOrRelease parameter to 1 for release
                     childAction(1);
                 }
